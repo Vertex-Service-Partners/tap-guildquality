@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from singer_sdk import Tap
 from singer_sdk import typing as th
 
 from tap_guildquality import streams
+
+if TYPE_CHECKING:
+    from tap_guildquality.client import GuildQualityStream
 
 
 class TapGuildQuality(Tap):
@@ -38,7 +43,7 @@ class TapGuildQuality(Tap):
         ),
     ).to_dict()
 
-    def discover_streams(self) -> list[streams.SurveysStream]:
+    def discover_streams(self) -> list[GuildQualityStream]:
         """Return a list of discovered streams.
 
         Returns:
@@ -46,6 +51,15 @@ class TapGuildQuality(Tap):
         """
         return [
             streams.SurveysStream(self),
+            streams.DeletedSurveysStream(self),
+            streams.ReviewsStream(self),
+            streams.ReviewSummaryStream(self),
+            streams.SurveyTemplatesStream(self),
+            streams.TeamStream(self),
+            streams.ChildrenStream(self),
+            streams.ReportsStream(self),
+            streams.ProjectUserRolesStream(self),
+            streams.CustomFieldsStream(self),
         ]
 
 

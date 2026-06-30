@@ -13,8 +13,23 @@ import os
 import pytest
 from singer_sdk.testing import get_tap_test_class
 
+from tap_guildquality.streams.reviews import ReviewsStream
 from tap_guildquality.streams.surveys import SurveysStream
 from tap_guildquality.tap import TapGuildQuality
+
+
+class _FakeResponse:
+    """Minimal stand-in for requests.Response with a .json() method."""
+
+    def __init__(self, payload: object) -> None:
+        self._payload = payload
+
+    def json(self) -> object:
+        return self._payload
+
+
+def _stream(cls: type) -> object:
+    return cls(TapGuildQuality(config={"api_key": "x"}, validate_config=False))
 
 API_KEY = os.environ.get("TAP_GUILDQUALITY_API_KEY")
 
@@ -65,3 +80,28 @@ def test_post_process_json_encodes_dynamic_fields() -> None:
     assert row is not None
     assert row["project"]["customFilters"] == '{"Color": ["Onyx Black"]}'
     assert row["project"]["users"] == "[]"
+
+
+def test_parse_response_handles_both_shapes() -> None:
+    """Wrapped {data:[...]} and bare-array responses both yield records."""
+    stream = _stream(SurveysStream)
+    assert list(stream.parse_response(_FakeResponse({"data": [{"id": 1}]}))) == [{"id": 1}]
+    assert list(stream.parse_response(_FakeResponse([{"id": 2}]))) == [{"id": 2}]
+    assert list(stream.parse_response(_FakeResponse([]))) == []
+    assert list(stream.parse_response(_FakeResponse({"data": None}))) == []
+
+
+def test_reviews_additional_question_rating_stringified() -> None:
+    """additionalQuestions[].rating (int|null per docs) is coerced to a string."""
+    stream = _stream(ReviewsStream)
+    row = stream.post_process(
+        {"reviewId": 1, "additionalQuestions": [{"question": "q", "rating": 5, "comment": ""}]},
+    )
+    assert row is not None
+    assert row["additionalQuestions"][0]["rating"] == "5"
+
+
+def test_reviews_drops_null_pk() -> None:
+    """The generic base guard drops a review with no reviewId."""
+    stream = _stream(ReviewsStream)
+    assert stream.post_process({"reviewId": None}) is None

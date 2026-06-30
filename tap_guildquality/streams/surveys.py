@@ -138,9 +138,8 @@ class SurveysStream(GuildQualityStream):
     @override
     def post_process(self, row: Record, context: Context | None = None) -> Record | None:
         """Drop null-PK records and JSON-encode dynamic project sub-objects."""
-        del context
-        if not row.get("id"):
-            self.logger.warning("surveys: dropping record with null/empty PK")
+        row = super().post_process(row, context)
+        if row is None:
             return None
 
         project = row.get("project")
@@ -160,3 +159,24 @@ class SurveysStream(GuildQualityStream):
             if isinstance(response, (dict, list)):
                 question["response"] = json.dumps(response)
         return row
+
+
+class DeletedSurveysStream(GuildQualityStream):
+    """Deleted-survey tombstones (GET /surveys/deleted).
+
+    Returns a *bare JSON array* (handled by the base ``parse_response``). This
+    account currently returns none, so the schema is doc-derived. Full-table:
+    it's a small tombstone list and the deleted endpoint's incremental support
+    is unconfirmed.
+    """
+
+    name = "deleted_surveys"
+    path = "/surveys/deleted"
+    primary_keys = ("id",)
+
+    schema = th.PropertiesList(
+        th.Property("id", th.IntegerType),
+        th.Property("status", th.IntegerType),
+        th.Property("companyId", th.IntegerType),
+        th.Property("deletedAt", th.StringType),  # "2019-01-29 14:41:14" — not ISO-T
+    ).to_dict()

@@ -10,16 +10,28 @@ team / custom fields) into the Vertex warehouse.
 
 ## Streams
 
-| Stream    | Endpoint                       | Replication | Primary key |
-|-----------|--------------------------------|-------------|-------------|
-| `surveys` | `GET /company-api/v3/surveys`  | incremental on `updatedAt` | `id` |
+| Stream               | Endpoint                          | Replication                  | Primary key |
+|----------------------|-----------------------------------|------------------------------|-------------|
+| `surveys`            | `GET /surveys`                    | incremental on `updatedAt`       | `id`        |
+| `reviews`            | `GET /reviews`                    | incremental on `lastActivityAt`  | `reviewId`  |
+| `review_summary`     | `GET /review-summary`             | full table                       | `companyId` |
+| `survey_templates`   | `GET /survey-templates`           | full table                       | `id`        |
+| `team`               | `GET /team`                       | full table                       | `id`        |
+| `children`           | `GET /children`                   | full table                       | `id`        |
+| `reports`            | `GET /reports`                    | full table                       | `id`        |
+| `deleted_surveys`    | `GET /surveys/deleted`            | full table                       | `id`        |
+| `custom_fields`      | `GET /custom-fields`              | full table                       | `id`        |
+| `project_user_roles` | `GET /project-user-roles`         | full table                       | `id`        |
 
-> **Scaffold status:** this is the one-stream Mode-B scaffold from the Vertex
-> `meltano-tap-onboard` skill. `surveys` is fully implemented and validated;
-> the other endpoints the API exposes (`reviews`, `review-summary`,
-> `survey-templates`, `custom-fields`, `team`, `project-user-roles`,
-> `children`, `reports`, `surveys/deleted`) are not yet implemented — see the
-> handoff checklist.
+> **Schema notes:** `surveys` and `reviews` are validated against live data with
+> zero dropped fields. `custom_fields`, `project_user_roles`, and
+> `deleted_surveys` return empty on the account this was built against, and the
+> `reviews` `response` / `additionalQuestions` sub-objects were never populated
+> in any sampled page — those four schemas are **doc-derived** and should be
+> re-verified once real data appears (the SDK logs `not found in catalog schema`
+> if a live field is missing). `custom_fields` and `deleted_surveys` return a
+> bare JSON array; the base client parses both that and the `{"data": [...]}`
+> wrapper.
 
 ## Configuration
 

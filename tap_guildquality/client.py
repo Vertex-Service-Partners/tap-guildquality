@@ -29,8 +29,10 @@ else:  # pragma: no cover
     from typing_extensions import override
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     import requests
-    from singer_sdk.helpers.types import Context
+    from singer_sdk.helpers.types import Context, Record
 
 
 class GuildQualityPaginator(BaseHATEOASPaginator):
@@ -46,10 +48,36 @@ class GuildQualityPaginator(BaseHATEOASPaginator):
 class GuildQualityStream(RESTStream):
     """GuildQuality base stream class."""
 
-    records_jsonpath = "$.data[*]"
-
     # URL paths are not sensitive here, and seeing them helps debugging.
     _LOG_REQUEST_METRIC_URLS = True
+
+    @override
+    def parse_response(self, response: requests.Response) -> Iterable[Record]:
+        """Yield records, tolerating both response shapes.
+
+        Most endpoints wrap records in ``{"data": [...]}``, but a few
+        (``custom-fields``, ``surveys/deleted``) return a bare JSON array.
+        Handle both so a stream doesn't break on the shape it happens to get.
+        """
+        body = response.json()
+        records = body if isinstance(body, list) else (body.get("data") or [])
+        yield from records
+
+    @override
+    def post_process(self, row: Record, context: Context | None = None) -> Record | None:
+        """Drop records with a null/empty primary key.
+
+        A null PK breaks ``target-snowflake``'s MERGE (``NULL = NULL`` is false,
+        so it inserts an unmergeable duplicate every run) and trips NOT NULL if
+        the column was declared required. Subclasses that need extra shaping
+        should call ``super().post_process(...)`` first.
+        """
+        del context
+        for key in self.primary_keys or ():
+            if not row.get(key):
+                self.logger.warning("%s: dropping record with null/empty PK %r", self.name, key)
+                return None
+        return row
 
     @property
     @override
@@ -89,8 +117,8 @@ class GuildQualityStream(RESTStream):
     ) -> dict[str, Any]:
         """Return query params for the request.
 
-        On the first page we set the incremental + ordering params. On every
-        subsequent page we simply replay the query string the API handed us in
+        On the first page we set the incremental window. On every subsequent
+        page we simply replay the query string the API handed us in
         ``links.next`` (which already carries those params forward).
         """
         if next_page_token:
@@ -99,11 +127,12 @@ class GuildQualityStream(RESTStream):
 
         params: dict[str, Any] = {}
         if self.replication_key:
-            params["orderBy"] = self.replication_key
             start = self.get_starting_replication_key_value(context)
             if start:
                 # The ``since`` filter is date-granular (YYYY-MM-DD). We pull
                 # the whole bookmark day each run; MERGE on the PK dedupes.
+                # ``dateFilter`` tells the API which timestamp ``since`` applies
+                # to, and must equal the replication key.
                 params["since"] = str(start)[:10]
                 params["dateFilter"] = self.replication_key
         return params
