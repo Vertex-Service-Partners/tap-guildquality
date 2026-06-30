@@ -1,0 +1,25 @@
+# Secrets / local env
+.env
+.secrets/
+
+# Meltano
+.meltano/
+output/
+*.jsonl
+plugins/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# State / catalog scratch
+.tap-state.json
+catalog.json
